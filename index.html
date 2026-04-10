@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CryptoVault</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: #111;
+      color: #e0e0e0;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      min-height: 100vh;
+      padding: 40px 16px;
+    }
+
+    h1 {
+      font-size: 2rem;
+      color: #00cc66;
+      margin-bottom: 8px;
+      letter-spacing: 2px;
+    }
+
+    p.subtitle {
+      color: #888;
+      margin-bottom: 32px;
+      font-size: 0.95rem;
+    }
+
+    .card {
+      background: #1a1a1a;
+      border: 1px solid #333;
+      border-radius: 10px;
+      padding: 28px;
+      width: 100%;
+      max-width: 560px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    label {
+      font-size: 0.85rem;
+      color: #aaa;
+      margin-bottom: 4px;
+      display: block;
+    }
+
+    textarea {
+      width: 100%;
+      background: #111;
+      border: 1px solid #444;
+      border-radius: 6px;
+      color: #e0e0e0;
+      font-size: 0.95rem;
+      padding: 10px 12px;
+      resize: vertical;
+      min-height: 90px;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    textarea:focus { border-color: #00cc66; }
+
+    .row {
+      display: flex;
+      gap: 12px;
+    }
+
+    .row input[type="password"] {
+      flex: 1;
+      background: #111;
+      border: 1px solid #444;
+      border-radius: 6px;
+      color: #e0e0e0;
+      font-size: 0.95rem;
+      padding: 10px 12px;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    .row input[type="password"]:focus { border-color: #00cc66; }
+
+    .actions {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    button {
+      cursor: pointer;
+      border: none;
+      border-radius: 6px;
+      font-size: 0.9rem;
+      padding: 10px 18px;
+      transition: opacity 0.15s, background 0.3s;
+      color: #fff;
+    }
+
+    button:hover { opacity: 0.85; }
+
+    #btnEncrypt { background: #006633; flex: 1; }
+    #btnDecrypt { background: #333366; flex: 1; }
+    #btnAdvanced { background: #222; }
+
+    #output {
+      width: 100%;
+      background: #111;
+      border: 1px solid #444;
+      border-radius: 6px;
+      color: #00cc66;
+      font-size: 0.85rem;
+      font-family: monospace;
+      padding: 10px 12px;
+      min-height: 90px;
+      white-space: pre-wrap;
+      word-break: break-all;
+    }
+
+    #status {
+      font-size: 0.8rem;
+      color: #666;
+      text-align: right;
+    }
+  </style>
+</head>
+<body>
+  <h1>🔐 CryptoVault</h1>
+  <p class="subtitle">Client-side AES encryption in your browser</p>
+
+  <div class="card">
+    <div>
+      <label for="inputText">Plaintext / Ciphertext</label>
+      <textarea id="inputText" placeholder="Enter text to encrypt or decrypt…"></textarea>
+    </div>
+
+    <div class="row">
+      <input type="password" id="passphrase" placeholder="Passphrase" />
+    </div>
+
+    <div class="actions">
+      <button id="btnEncrypt" onclick="runEncrypt()">Encrypt</button>
+      <button id="btnDecrypt" onclick="runDecrypt()">Decrypt</button>
+      <button id="btnAdvanced" onclick="toggleAdvancedMode()">Advanced Mode</button>
+    </div>
+
+    <div>
+      <label>Output</label>
+      <div id="output"></div>
+    </div>
+
+    <div id="status">Standard mode — AES-CBC, 100k PBKDF2 iterations</div>
+  </div>
+
+  <script>
+    let advanced = false;
+
+    window.toggleAdvancedMode = function() {
+      advanced = !advanced;
+      const btn = document.querySelector('#btnAdvanced');
+      btn.textContent = advanced ? "Advanced Mode ON — more crypto, slower" : "Advanced Mode";
+      btn.style.background = advanced ? "#004400" : "#222";
+
+      document.getElementById('status').textContent = advanced
+        ? 'Advanced mode — AES-GCM, 600k PBKDF2 iterations'
+        : 'Standard mode — AES-CBC, 100k PBKDF2 iterations';
+
+      console.log(advanced ? "Advanced encryption engaged. Slower but stronger." : "Back to normal speed.");
+    };
+
+    function getPassphrase() {
+      const p = document.getElementById('passphrase').value;
+      if (!p) throw new Error('Please enter a passphrase.');
+      return new TextEncoder().encode(p);
+    }
+
+    async function deriveKey(passphraseBytes, salt, mode) {
+      const iterations = advanced ? 600000 : 100000;
+      const algorithm = advanced ? 'AES-GCM' : 'AES-CBC';
+      const baseKey = await crypto.subtle.importKey('raw', passphraseBytes, 'PBKDF2', false, ['deriveKey']);
+      return {
+        key: await crypto.subtle.deriveKey(
+          { name: 'PBKDF2', salt, iterations, hash: 'SHA-256' },
+          baseKey,
+          { name: algorithm, length: 256 },
+          false,
+          ['encrypt', 'decrypt']
+        ),
+        algorithm
+      };
+    }
+
+    async function runEncrypt() {
+      const output = document.getElementById('output');
+      try {
+        const passphraseBytes = getPassphrase();
+        const plaintext = document.getElementById('inputText').value;
+        if (!plaintext) throw new Error('Please enter text to encrypt.');
+
+        const salt = crypto.getRandomValues(new Uint8Array(16));
+        const iv   = crypto.getRandomValues(new Uint8Array(advanced ? 12 : 16));
+        const { key, algorithm } = await deriveKey(passphraseBytes, salt);
+
+        const ciphertext = await crypto.subtle.encrypt(
+          algorithm === 'AES-GCM' ? { name: 'AES-GCM', iv } : { name: 'AES-CBC', iv },
+          key,
+          new TextEncoder().encode(plaintext)
+        );
+
+        const combined = new Uint8Array(1 + salt.length + iv.length + ciphertext.byteLength);
+        combined[0] = advanced ? 1 : 0;
+        combined.set(salt, 1);
+        combined.set(iv, 1 + salt.length);
+        combined.set(new Uint8Array(ciphertext), 1 + salt.length + iv.length);
+
+        output.textContent = btoa(String.fromCharCode(...combined));
+      } catch (e) {
+        output.textContent = '⚠ ' + e.message;
+      }
+    }
+
+    async function runDecrypt() {
+      const output = document.getElementById('output');
+      try {
+        const passphraseBytes = getPassphrase();
+        const encoded = document.getElementById('inputText').value.trim();
+        if (!encoded) throw new Error('Please enter ciphertext to decrypt.');
+
+        const combined = Uint8Array.from(atob(encoded), c => c.charCodeAt(0));
+        const isAdvanced = combined[0] === 1;
+        const salt = combined.slice(1, 17);
+        const ivLen = isAdvanced ? 12 : 16;
+        const iv = combined.slice(17, 17 + ivLen);
+        const ciphertext = combined.slice(17 + ivLen);
+
+        const algorithm = isAdvanced ? 'AES-GCM' : 'AES-CBC';
+        const iterations = isAdvanced ? 600000 : 100000;
+        const baseKey = await crypto.subtle.importKey('raw', passphraseBytes, 'PBKDF2', false, ['deriveKey']);
+        const key = await crypto.subtle.deriveKey(
+          { name: 'PBKDF2', salt, iterations, hash: 'SHA-256' },
+          baseKey,
+          { name: algorithm, length: 256 },
+          false,
+          ['encrypt', 'decrypt']
+        );
+
+        const plaintext = await crypto.subtle.decrypt(
+          algorithm === 'AES-GCM' ? { name: 'AES-GCM', iv } : { name: 'AES-CBC', iv },
+          key,
+          ciphertext
+        );
+
+        output.textContent = new TextDecoder().decode(plaintext);
+      } catch (e) {
+        output.textContent = '⚠ Decryption failed — wrong passphrase or corrupted data.';
+      }
+    }
+  </script>
+</body>
+</html>
