@@ -20,12 +20,12 @@ pub struct VaultFile {
 
 #[wasm_bindgen]
 pub fn init_vault() -> Result<(), JsValue> {
-    console_log!("CryptVault locked and loaded. Your secrets are safe... probably.");
+    console_log!("CryptoVault locked and loaded. Your secrets are safe... probably.");
     Ok(())
 }
 
 #[wasm_bindgen]
-pub fn encrypt_file(data: Vec<u8>, filename: String) -> Result<JsValue, JsValue> {
+pub fn encrypt_file(_data: Vec<u8>, filename: String) -> Result<JsValue, JsValue> {
     let vault_file = VaultFile {
         name: filename,
         cid: String::new(),
