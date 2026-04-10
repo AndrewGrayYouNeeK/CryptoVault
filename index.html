@@ -178,7 +178,7 @@
       return new TextEncoder().encode(p);
     }
 
-    async function deriveKey(passphraseBytes, salt, mode) {
+    async function deriveKey(passphraseBytes, salt) {
       const iterations = advanced ? 600000 : 100000;
       const algorithm = advanced ? 'AES-GCM' : 'AES-CBC';
       const baseKey = await crypto.subtle.importKey('raw', passphraseBytes, 'PBKDF2', false, ['deriveKey']);
